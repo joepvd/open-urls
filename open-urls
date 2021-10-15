@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+
+# Library and executable that opens a bunch urls on stdin or as args
+
+halp() {
+  cat <<-EOHALP
+	open-urls: Library and executable to open a bunch of urls
+	in a new browser window.
+	
+	Usage:
+	  open-urls https://example.org https://example.com
+	  BROWSER=qutebrowser open-urls https://example.org https://example.com
+	  echo 'https://example.com
+	  https://example.org' | open-urls
+	
+	As a bash library:
+	  source /path/to/open-urls
+	  urls=( "https://example.org https://example.com )
+	  BROWSER=firefox
+	  open-urls urls # This is a reference to the variable urls. Do not expand it!
+	
+	Currently supported browsers:
+	- brave
+	- chrome
+	- chromium
+	- firefox
+	- qutebrowser
+	EOHALP
+}
+
+open-urls() {
+  local cmd fmt
+  declare -n _urls
+  _urls="$1"
+
+  case "$browser" in
+  qutebrowser)
+    cmd="qutebrowser '${_urls[0]}'"
+    fmt=" ':open --tab %s'"
+    ;;
+  firefox)
+    cmd="firefox -url '${_urls[0]}'"
+    fmt=" -url '%s'"
+    ;;
+  chrome)
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      cmd="/Applications/Google\\ \\Chrome.app/Contents/MacOS/Google\\ \\Chrome --new-window '${_urls[0]}'"
+    else
+      cmd="google-chrome --new-window '${_urls[0]}'"
+    fi
+    fmt=" -url '%s'"
+    ;;
+  chromium|brave)
+    cmd="$browser-browser --new-window '${_urls[0]}'"
+    fmt=" -url '%s'"
+    ;;
+  *)
+    echo "Do not understand browser $browser. Exiting" >/dev/stderr
+    halp >/dev/stderr
+    exit 1
+    ;;
+  esac
+
+  cmd="$cmd $(printf "$fmt" "${_urls[@]:1}")"
+
+  if [[ -n "${I3SOCK:-}" ]]; then
+    # We are running in i3. Use i3-msg exec
+    cmd="i3-msg exec -- \"$cmd\""
+  fi
+  echo "$cmd" >/dev/stderr
+  eval "$cmd"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  : ${browser:=${BROWSER-firefox}}
+  urls=()
+  if [[ -p /dev/stdin ]]; then
+    # Reading from a pipe
+    while IFS= read -r url; do
+      urls=( "${urls[@]}" "$url" )
+    done
+  else
+    urls=( "$@" )
+  fi
+  open-urls urls
+fi
+
+# vim: ft=bash
